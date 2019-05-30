@@ -1,0 +1,86 @@
+diff --git a/lucet-wasi/bindings.json b/lucet-wasi/bindings.json
+index 568ad7e..4aada65 100644
+--- a/lucet-wasi/bindings.json
++++ b/lucet-wasi/bindings.json
+@@ -27,6 +27,7 @@
+         "fd_sync": "__wasi_fd_sync",
+         "fd_tell": "__wasi_fd_tell",
+         "fd_write": "__wasi_fd_write",
++        "fd_hoge": "__wasi_fd_hoge",
+         "path_create_directory": "__wasi_path_create_directory",
+         "path_filestat_get": "__wasi_path_filestat_get",
+         "path_filestat_set_times": "__wasi_path_filestat_set_times",
+diff --git a/lucet-wasi/src/hostcalls/fs.rs b/lucet-wasi/src/hostcalls/fs.rs
+index 65b60fd..def189d 100644
+--- a/lucet-wasi/src/hostcalls/fs.rs
++++ b/lucet-wasi/src/hostcalls/fs.rs
+@@ -316,6 +316,47 @@ pub fn wasi_fd_write(
+     }
+ }
+ 
++pub fn wasi_fd_hoge(
++    vmctx: &mut Vmctx,
++    fd: wasm32::__wasi_fd_t,
++    iovs_ptr: wasm32::uintptr_t,
++    iovs_len: wasm32::size_t,
++    nwritten: wasm32::uintptr_t,
++) -> wasm32::__wasi_errno_t {
++    use nix::sys::uio::{writev, IoVec};
++
++    let fd = dec_fd(fd);
++    let iovs = match unsafe { dec_ciovec_slice(vmctx, iovs_ptr, iovs_len) } {
++        Ok(iovs) => iovs,
++        Err(e) => return enc_errno(e),
++    };
++
++    let ctx = vmctx.get_embed_ctx::<WasiCtx>();
++    let rights = host::__WASI_RIGHT_FD_WRITE;
++    let fe = match ctx.get_fd_entry(fd, rights.into(), 0) {
++        Ok(fe) => fe,
++        Err(e) => return enc_errno(e),
++    };
++
++    let iovs: Vec<IoVec<&[u8]>> = iovs
++        .iter()
++        .map(|iov| unsafe { host::ciovec_to_nix(iov) })
++        .collect();
++
++    println!("wasi_fd_hoge function is called!");
++
++    let host_nwritten = match writev(fe.fd_object.rawfd, &iovs) {
++        Ok(len) => len,
++        Err(e) => return wasm32::errno_from_nix(e.as_errno().unwrap()),
++    };
++
++    unsafe {
++        enc_usize_byref(vmctx, nwritten, host_nwritten)
++            .map(|_| wasm32::__WASI_ESUCCESS)
++            .unwrap_or_else(|e| e)
++    }
++}
++
+ pub fn wasi_path_open(
+     vmctx: &mut Vmctx,
+     dirfd: wasm32::__wasi_fd_t,
+diff --git a/lucet-wasi/src/hostcalls/mod.rs b/lucet-wasi/src/hostcalls/mod.rs
+index 4504681..54bf628 100644
+--- a/lucet-wasi/src/hostcalls/mod.rs
++++ b/lucet-wasi/src/hostcalls/mod.rs
+@@ -167,6 +167,17 @@ lucet_hostcalls! {
+         wasi_fd_write(vmctx, fd, iovs_ptr, iovs_len, nwritten)
+     }
+ 
++    #[no_mangle] pub unsafe extern "C"
++    fn __wasi_fd_hoge(
++        &mut vmctx,
++        fd: wasm32::__wasi_fd_t,
++        iovs_ptr: wasm32::uintptr_t,
++        iovs_len: wasm32::size_t,
++        nwritten: wasm32::uintptr_t,
++    ) -> wasm32::__wasi_errno_t {
++        wasi_fd_hoge(vmctx, fd, iovs_ptr, iovs_len, nwritten)
++    }
++
+     #[no_mangle] pub unsafe extern "C"
+     fn __wasi_path_open(
+         &mut vmctx,
