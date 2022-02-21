@@ -1,0 +1,13 @@
+[package]
+name = "profiling-mutex"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4"
+tokio = { version = "=1.17.0", features = ["full", "tracing"] }
+# use the same version as tokio
+tracing = { version = "=0.1.25", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "=0.3.9", features = ["registry", "fmt", "env-filter"] }
